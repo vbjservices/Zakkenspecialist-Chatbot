@@ -1,7 +1,7 @@
 /* ====== CONFIG ====== */
 const CHATBOT_CONFIG = {
-  webhookUrl: "https://n8n1.vbservices.org/webhook/c5796ce9-6a17-4181-b39c-20108ed3f122/chat",
-  title: "Support Assistant",
+  webhookUrl: "https://n8n1.vbservices.org/webhook/167a3d1c-e104-4a41-8241-941148302b51/chat",
+  title: "De Zakkenspecialist Assistent",
 
   // Bubble iconen
   bubbleIconClosed: "./Assets/ChatImage.png",
@@ -29,7 +29,7 @@ const CHATBOT_CONFIG = {
   watermark: {
     image: "./Assets/plastic_molecules1.png",
     mode: "center",       // "center" of "tile"
-    text: "",             // bv. "© Dimensio"
+    text: "",
     opacity: 0.6
   },
 
@@ -40,8 +40,8 @@ const CHATBOT_CONFIG = {
   resize: {
     minW: 300, minH: 360,          // px
     maxWvw: 90, maxHvh: 85,        // % van viewport
-    remember: true,                // maat onthouden in localStorage
-    storageKey: "cb_size"          // prefix voor opslag
+    remember: true,
+    storageKey: "cb_size"
   },
 };
 /* ===================== */
@@ -71,7 +71,6 @@ const CHATBOT_CONFIG = {
     elAvatar.referrerPolicy = "no-referrer";
   }
 
-  // Zet de gewenste zoom voor het open-icoon als CSS var (voor 100% fill)
   function applyOpenZoom(){
     const zoom = Number(CHATBOT_CONFIG.bubbleOpenZoom || 1);
     elToggle.style.setProperty('--cb-open-zoom', String(zoom > 0 ? zoom : 1));
@@ -265,8 +264,8 @@ const CHATBOT_CONFIG = {
       const r = elWin.getBoundingClientRect();
       startW = r.width; startH = r.height; startX = x; startY = y;
       resizing = true;
+      elWin.classList.add('cb-resizing');   // << toggle klasse
       document.body.style.cursor = 'nw-resize';
-      document.body.style.userSelect = 'none';
     };
     const onMove = (x,y)=>{
       if (!resizing) return;
@@ -281,23 +280,23 @@ const CHATBOT_CONFIG = {
     const onUp = ()=>{
       if (!resizing) return;
       resizing = false;
+      elWin.classList.remove('cb-resizing'); // << toggle klasse
       document.body.style.cursor = '';
-      document.body.style.userSelect = '';
       if (cfg.remember) {
         const r = elWin.getBoundingClientRect();
         localStorage.setItem(key('w'), String(Math.round(r.width)));
         localStorage.setItem(key('h'), String(Math.round(r.height)));
       }
+      window.removeEventListener('mousemove', onMouseMove);
     };
 
     grip.addEventListener('mousedown', e=>{
       e.preventDefault(); e.stopPropagation();
       onDown(e.clientX, e.clientY);
       window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp, { once:true });
+      window.addEventListener('mouseup', onUp, { once:true });
     });
     const onMouseMove = (e)=> onMove(e.clientX, e.clientY);
-    const onMouseUp   = ()=> { onUp(); window.removeEventListener('mousemove', onMouseMove); };
 
     grip.addEventListener('touchstart', e=>{
       const t = e.touches[0]; if (!t) return;
@@ -325,7 +324,7 @@ const CHATBOT_CONFIG = {
   setBubbleIcons(CHATBOT_CONFIG.bubbleIconClosed, CHATBOT_CONFIG.bubbleIconOpen);
   preload(CHATBOT_CONFIG.bubbleIconClosed); preload(CHATBOT_CONFIG.bubbleIconOpen);
   setAvatar(CHATBOT_CONFIG.agentAvatar);
-  applyOpenZoom();              // <<-- belangrijk voor 100% vulling
+  applyOpenZoom();
   if (CHATBOT_CONFIG.title) qs('#cbTitle').textContent = CHATBOT_CONFIG.title;
 
   // Watermark + Resize init

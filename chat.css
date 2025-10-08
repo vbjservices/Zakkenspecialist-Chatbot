@@ -38,14 +38,13 @@
   width:calc(100% + 2px);
   height:calc(100% + 2px);
   border-radius:50%;
-  object-fit:cover;        /* vult de cirkel maximaal zonder verhouding te breken */
+  object-fit:cover;
   object-position:center;
   transition:opacity .25s ease, transform .25s ease, filter .25s ease;
   will-change:opacity,transform;
   user-select:none; pointer-events:none;
 }
 .cb-icon-closed{ opacity:1; transform:scale(1); }
-/* default: open laag is verstopt, zoom wordt via var gestuurd (standaard 1) */
 .cb-icon-open  { opacity:0; transform:scale(var(--cb-open-zoom)) rotate(-6deg); }
 .cb-bubble.is-open .cb-icon-closed{ opacity:0; transform:scale(1.05) rotate(6deg); }
 .cb-bubble.is-open .cb-icon-open  { opacity:1; transform:scale(var(--cb-open-zoom)) rotate(0); }
@@ -61,10 +60,15 @@
   background:var(--cb-bg); color:var(--cb-text); font-family:var(--cb-font);
   border-radius:calc(var(--cb-radius) + 4px); box-shadow:var(--cb-shadow);
   display:none; overflow:hidden; z-index:9999;
-  /* voorkom textselectie tijdens resize */
-  user-select:none;
+  /* LET OP: user-select hier NIET blokkeren; selecteren moet kunnen */
 }
 .cb-window.cb-open{ display:grid; grid-template-rows:auto 1fr auto; }
+
+/* Alleen TIJDENS resizen selectie blokkeren */
+.cb-window.cb-resizing, .cb-window.cb-resizing *{
+  user-select:none !important;
+  -webkit-user-select:none !important;
+}
 
 /* Header */
 .cb-header{
@@ -83,15 +87,16 @@
   overflow:auto;
   background:linear-gradient(#fff,#fff) padding-box;
   position:relative;          /* nodig voor watermark layering */
+  user-select:text;           /* tekst selecteerbaar in de body */
 }
 
 /* Watermark — ALTIJD onder de berichten */
 .cb-watermark{
   position:absolute; inset:0;
-  z-index:0;                   /* lager dan berichten */
+  z-index:0;
   pointer-events:none;
   display:grid; place-items:center;
-  opacity:.08;                 /* default; JS kan dit overschrijven */
+  opacity:.08;
 }
 .cb-watermark img{ max-width:60%; max-height:60%; filter:grayscale(100%); }
 .cb-watermark.tiled{
@@ -108,7 +113,7 @@
 
 /* Bubbles */
 .cb-msg{
-  position:relative; z-index:1;   /* BOVEN watermark */
+  position:relative; z-index:1;
   max-width:82%;
   padding:10px 12px;
   border-radius:14px;
@@ -116,6 +121,7 @@
   line-height:1.5;
   word-wrap:break-word;
   white-space:normal;
+  user-select:text;           /* tekst in bubbles selecteerbaar */
 }
 .cb-msg.bot  { background:var(--cb-bot); border-top-left-radius:4px; }
 .cb-msg.user { background:var(--cb-user); border-top-right-radius:4px; margin-left:auto; }
@@ -137,6 +143,7 @@
 .cb-msg code{
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size:.9em; background:#f3f4f6; padding:.12em .35em; border-radius:6px;
+  user-select:text;
 }
 .cb-msg pre{
   margin:.4em 0; background:#f6f7f9; border-radius:10px; padding:.6em .8em; overflow:auto;
@@ -155,6 +162,7 @@
   display:block;
   border-radius:10px;
   margin:.35em 0 0;
+  user-select:none; /* images zelf niet selecteren */
 }
 
 /* Footer */
@@ -162,7 +170,10 @@
   display:grid; grid-template-columns:1fr auto;
   gap:8px; padding:10px; border-top:1px solid #ececec; background:#fafafa;
 }
-.cb-input{ border:1px solid #e2e2e2; padding:10px 12px; border-radius:12px; outline:none; font:inherit; background:#fff; }
+.cb-input{
+  border:1px solid #e2e2e2; padding:10px 12px; border-radius:12px; outline:none; font:inherit; background:#fff;
+  user-select:text;
+}
 .cb-send{ background:var(--cb-primary); color:var(--cb-primary-contrast); border:0; padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:600; }
 .cb-send[disabled]{ opacity:.6; cursor:not-allowed; }
 
@@ -192,5 +203,5 @@
 
 @media (max-width:480px){
   .cb-window{ right:10px; left:10px; width:auto; height:70vh; }
-  .cb-resize{ display:none; } /* op erg smalle schermen geen custom resize */
+  .cb-resize{ display:none; }
 }
