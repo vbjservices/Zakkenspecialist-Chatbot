@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chatbot Preview</title>
+
+  <!-- Jouw bestaande widget-styles -->
+  <link rel="stylesheet" href="chat.css" />
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+      background: #000;
+    }
+
+    .preview-wrapper {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Website in iframe - vult het hele scherm */
+    #siteFrame {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="preview-wrapper">
+    <!-- Website van de klant -->
+    <iframe id="siteFrame"></iframe>
+  </div>
+
+  <!-- 🔹 JOUW CHAT WIDGET markup (GEKOPIEERD uit index.html) -->
+  <button class="cb-bubble" id="cbToggle" aria-label="Open chat" aria-expanded="false" type="button">
+    <img class="cb-icon cb-icon-closed" alt="" />
+    <img class="cb-icon cb-icon-open"   alt="" />
+  </button>
+
+  <div class="cb-window" id="cbWindow" role="dialog" aria-labelledby="cbTitle" aria-modal="true">
+    <div class="cb-header">
+      <div class="cb-avatar"><img id="cbAvatar" alt="Agent" /></div>
+      <div class="cb-title" id="cbTitle">Chat met ons</div>
+      <div class="cb-close" id="cbClose" aria-label="Sluiten" role="button" tabindex="0">×</div>
+    </div>
+    <div class="cb-body" id="cbBody"></div>
+    <form class="cb-footer" id="cbForm">
+      <input id="cbInput" class="cb-input" placeholder="Typ je bericht..." autocomplete="off" />
+      <button class="cb-send" id="cbSend" type="submit">Verstuur</button>
+    </form>
+  </div>
+  <!-- 🔸 einde widget-markup -->
+
+  <!-- Jouw bestaande widget-logica -->
+  <script src="chat.js"></script>
+
+  <script>
+    // Lees URL parameter "?url=https://klant.nl"
+    const params = new URLSearchParams(location.search);
+    const target = params.get("url") || "https://www.dezakkenspecialist.nl/";
+
+    // Vul iframe met klantsite
+    document.getElementById("siteFrame").src = target;
+  </script>
+</body>
+</html>
