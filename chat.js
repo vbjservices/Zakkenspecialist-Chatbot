@@ -12,7 +12,7 @@ const CHATBOT_CONFIG = {
 
   headers: {},
 
-  // Output parser
+  // Output parser (fallback wanneer er geen streaming is)
   parseReply: (data) => {
     if (!data) return "Er ging iets mis. Probeer opnieuw.";
     if (typeof data === "string") return data;
@@ -28,18 +28,18 @@ const CHATBOT_CONFIG = {
   // Watermark (optioneel)
   watermark: {
     image: "./Assets/plastic_molecules1.png",
-    mode: "center",       // "center" of "tile"
+    mode: "center",  // "center" of "tile"
     text: "",
     opacity: 0.6
   },
 
-  // Extra: zoom voor open-icoon om transparante padding te compenseren
+  // Zoom voor open-icoon om transparante padding te compenseren
   bubbleOpenZoom: 1.3, // fill till button rims
 
   // Resize instellingen
   resize: {
-    minW: 300, minH: 360,          // px
-    maxWvw: 90, maxHvh: 85,        // % van viewport
+    minW: 300, minH: 360,
+    maxWvw: 90, maxHvh: 85,
     remember: true,
     storageKey: "cb_size"
   },
@@ -70,7 +70,6 @@ const CHATBOT_CONFIG = {
     elAvatar.src = bust(src);
     elAvatar.referrerPolicy = "no-referrer";
   }
-
   function applyOpenZoom(){
     const zoom = Number(CHATBOT_CONFIG.bubbleOpenZoom || 1);
     elToggle.style.setProperty('--cb-open-zoom', String(zoom > 0 ? zoom : 1));
@@ -168,6 +167,60 @@ const CHATBOT_CONFIG = {
     return m;
   }
 
+  // --- Streaming helpers ---
+  function sseAppendChunk(acc, dataStr){
+    // Probeer JSON te parsen, val terug op platte tekst
+    try {
+      const obj = JSON.parse(dataStr);
+      const chunk =
+        obj.token ?? obj.delta ?? obj.text ?? obj.output ?? obj.message ?? "";
+      return acc + (chunk || "");
+    } catch {
+      if (dataStr === "[DONE]") return acc;
+      return acc + dataStr;
+    }
+  }
+
+  async function readSSEStream(response, onUpdate){
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let full = "";
+    let lastFlush = 0;
+
+    const flush = () => {
+      onUpdate(full);
+      elBody.scrollTop = elBody.scrollHeight;
+      lastFlush = performance.now();
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) { flush(); break; }
+      buffer += decoder.decode(value, { stream: true });
+
+      // Split op SSE events (gescheiden door lege regel)
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const evt = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+
+        // Alleen data:-regels verzamelen
+        const lines = evt.split("\n");
+        for (const line of lines) {
+          if (line.startsWith("data:")) {
+            const dataStr = line.slice(5).trim();
+            if (dataStr === "[DONE]") { flush(); return; }
+            full = sseAppendChunk(full, dataStr);
+          }
+        }
+
+        // throttle UI updates
+        if (performance.now() - lastFlush > 50) flush();
+      }
+    }
+  }
+
   async function sendMessage(text){
     addMsg('user', text);
     const typing = addMsg('bot', '', true);
@@ -177,17 +230,31 @@ const CHATBOT_CONFIG = {
     try {
       const res = await fetch(CHATBOT_CONFIG.webhookUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...CHATBOT_CONFIG.headers },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream', ...CHATBOT_CONFIG.headers },
         body: JSON.stringify(payload),
       });
 
-      const raw = await res.text();
-      let data; try { data = JSON.parse(raw); } catch { data = raw; }
-      const reply = CHATBOT_CONFIG.parseReply(data);
-      typing.innerHTML = renderMarkdown(reply);
+      const ctype = (res.headers.get('content-type') || '').toLowerCase();
 
-      typing.querySelectorAll('img').forEach(img=> img.addEventListener('load', ()=>{ elBody.scrollTop = elBody.scrollHeight; }, {once:true}));
+      // Maak plek voor streaming output
+      typing.innerHTML = '';
+      const holder = document.createElement('div');
+      typing.appendChild(holder);
 
+      if (ctype.includes('text/event-stream') && res.body && 'getReader' in res.body) {
+        // STREAMING PAD (SSE)
+        await readSSEStream(res, (fullMd) => {
+          holder.innerHTML = renderMarkdown(fullMd);
+          holder.querySelectorAll?.('img').forEach(img => img.addEventListener('load', ()=>{ elBody.scrollTop = elBody.scrollHeight; }, {once:true}));
+        });
+      } else {
+        // FALLBACK: geen streaming → lees alles in één keer
+        const raw = await res.text();
+        let data; try { data = JSON.parse(raw); } catch { data = raw; }
+        const reply = CHATBOT_CONFIG.parseReply(data);
+        holder.innerHTML = renderMarkdown(reply);
+        holder.querySelectorAll?.('img').forEach(img => img.addEventListener('load', ()=>{ elBody.scrollTop = elBody.scrollHeight; }, {once:true}));
+      }
     } catch (e) {
       console.error(e);
       typing.textContent = "Sorry, er ging iets mis. Probeer het later opnieuw.";
@@ -264,7 +331,7 @@ const CHATBOT_CONFIG = {
       const r = elWin.getBoundingClientRect();
       startW = r.width; startH = r.height; startX = x; startY = y;
       resizing = true;
-      elWin.classList.add('cb-resizing');   // << toggle klasse
+      elWin.classList.add('cb-resizing');
       document.body.style.cursor = 'nw-resize';
     };
     const onMove = (x,y)=>{
@@ -280,7 +347,7 @@ const CHATBOT_CONFIG = {
     const onUp = ()=>{
       if (!resizing) return;
       resizing = false;
-      elWin.classList.remove('cb-resizing'); // << toggle klasse
+      elWin.classList.remove('cb-resizing');
       document.body.style.cursor = '';
       if (cfg.remember) {
         const r = elWin.getBoundingClientRect();
@@ -360,5 +427,6 @@ const CHATBOT_CONFIG = {
   });
 
   // Welkomstbericht (markdown)
-  addMsg('bot', renderMarkdown("Hoi! Waar kan ik je mee helpen?\n\n- Productvragen\n- Bestellingen\n- Levering & retour"), false, true);
+  const welcome = "Hoi! Waar kan ik je mee helpen?\n\n- Productvragen\n- Bestellingen\n- Levering & retour";
+  addMsg('bot', renderMarkdown(welcome), false, true);
 })();
