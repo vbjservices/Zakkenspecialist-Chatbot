@@ -9,14 +9,13 @@
   --cb-bubble-size:64px;
   --cb-bubble-gap:20px;
 
-  /* Default window size (kan door JS overschreven worden) */
+  /* Default window size */
   --cb-width:380px; --cb-height:560px;
 
-  /* Min/max voor resizen (JS hanteert dezelfde) */
+  /* Min/max voor resizen */
   --cb-min-width:300px; --cb-min-height:360px;
 
-  /* Zoom voor open icoon (wordt ook via JS gezet) */
-  --cb-open-zoom: 1; /* 1 = geen zoom; bv. 1.08 = +8% */
+  --cb-open-zoom: 1;
 }
 
 /* Floating bubble */
@@ -27,13 +26,18 @@
   cursor:pointer; z-index:9999; border:0; padding:0;
   background:none; outline-offset:3px;
   display:grid; place-items:center;
+  transition: transform .25s ease;
 }
-.cb-bubble:focus-visible{ outline:2px solid rgba(0,0,0,.2); }
+.cb-bubble:hover{
+  transform: scale(1.12);
+}
+.cb-bubble.is-open:hover{
+  transform: scale(1.18);
+}
 
-/* Icon-lagen in de bubble (crossfade) */
+/* Icon-lagen */
 .cb-icon{
   position:absolute;
-  /* kleine bleed om 1px randjes te voorkomen (transparante PNG-randen etc.) */
   inset:-1px;
   width:calc(100% + 2px);
   height:calc(100% + 2px);
@@ -49,22 +53,48 @@
 .cb-bubble.is-open .cb-icon-closed{ opacity:0; transform:scale(1.05) rotate(6deg); }
 .cb-bubble.is-open .cb-icon-open  { opacity:1; transform:scale(var(--cb-open-zoom)) rotate(0); }
 
-/* Chat window (rechtsonder geankerd) */
+/* Chat window */
 .cb-window{
-  position:fixed;
-  right:calc(var(--cb-bubble-gap) - 4px);
-  bottom:calc(var(--cb-bubble-gap) + var(--cb-bubble-size) + 10px);
-  width:var(--cb-width); height:var(--cb-height);
-  min-width:var(--cb-min-width); min-height:var(--cb-min-height);
-  max-width:min(90vw, 760px); max-height:min(85vh, 900px);
-  background:var(--cb-bg); color:var(--cb-text); font-family:var(--cb-font);
-  border-radius:calc(var(--cb-radius) + 4px); box-shadow:var(--cb-shadow);
-  display:none; overflow:hidden; z-index:9999;
-  /* LET OP: user-select hier NIET blokkeren; selecteren moet kunnen */
-}
-.cb-window.cb-open{ display:grid; grid-template-rows:auto 1fr auto; }
+  position: fixed;
+  right: calc(var(--cb-bubble-gap) - 4px);
+  bottom: calc(var(--cb-bubble-gap) + var(--cb-bubble-size) + 10px);
 
-/* Alleen TIJDENS resizen selectie blokkeren */
+  width: var(--cb-width);
+  height: var(--cb-height);
+  min-width: var(--cb-min-width);
+  min-height: var(--cb-min-height);
+  max-width: min(90vw, 760px);
+  max-height: min(85vh, 900px);
+
+  background: var(--cb-bg);
+  color: var(--cb-text);
+  font-family: var(--cb-font);
+
+  border-radius: 10px;
+  box-shadow: var(--cb-shadow);
+
+  /* 🔒 inhoud clippen zodat header-hoeken ook rond zijn */
+  overflow: hidden;
+
+  transform: translateY(20px) scale(.97);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity .28s ease,
+    transform .32s cubic-bezier(.16,.84,.44,1);
+  z-index: 9999;
+}
+
+.cb-window.cb-open{
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+
+  opacity:1;
+  transform: translateY(0) scale(1);
+  pointer-events:auto;
+}
+
+/* Tijdens resizen */
 .cb-window.cb-resizing, .cb-window.cb-resizing *{
   user-select:none !important;
   -webkit-user-select:none !important;
@@ -86,11 +116,11 @@
   padding:12px;
   overflow:auto;
   background:linear-gradient(#fff,#fff) padding-box;
-  position:relative;          /* nodig voor watermark layering */
-  user-select:text;           /* tekst selecteerbaar in de body */
+  position:relative;
+  user-select:text;
 }
 
-/* Watermark — ALTIJD onder de berichten */
+/* Watermark */
 .cb-watermark{
   position:absolute; inset:0;
   z-index:0;
@@ -111,7 +141,7 @@
   mix-blend-mode:multiply;
 }
 
-/* Bubbles */
+/* Chat bubbles */
 .cb-msg{
   position:relative; z-index:1;
   max-width:82%;
@@ -121,12 +151,17 @@
   line-height:1.5;
   word-wrap:break-word;
   white-space:normal;
-  user-select:text;           /* tekst in bubbles selecteerbaar */
+  user-select:text;
+  animation: cbMsgIn .22s ease;
+}
+@keyframes cbMsgIn{
+  from{ opacity:0; transform:translateY(4px); }
+  to  { opacity:1; transform:translateY(0); }
 }
 .cb-msg.bot  { background:var(--cb-bot); border-top-left-radius:4px; }
 .cb-msg.user { background:var(--cb-user); border-top-right-radius:4px; margin-left:auto; }
 
-/* Markdown typografie binnen berichten */
+/* Markdown etc */
 .cb-msg p{ margin:0 0 .5em 0; }
 .cb-msg h1,.cb-msg h2,.cb-msg h3{ margin:.2em 0 .3em; line-height:1.25; }
 .cb-msg h1{ font-size:1.15rem; }
@@ -150,7 +185,6 @@
 }
 .cb-msg pre code{ background:transparent; padding:0; }
 
-/* Links & afbeeldingen */
 .cb-msg a{
   color:var(--cb-primary);
   text-decoration:underline;
@@ -162,7 +196,7 @@
   display:block;
   border-radius:10px;
   margin:.35em 0 0;
-  user-select:none; /* images zelf niet selecteren */
+  user-select:none;
 }
 
 /* Footer */
@@ -184,7 +218,7 @@
 .cb-dot:nth-child(3){ animation-delay:.4s; }
 @keyframes cbblink{ 0%,80%,100%{opacity:.2} 40%{opacity:.9} }
 
-/* ===== Resize handle (linksboven) ===== */
+/* Resize handle (linksboven) */
 .cb-resize{
   position:absolute; left:3px; top:3px;
   width:18px; height:18px;
@@ -204,4 +238,58 @@
 @media (max-width:480px){
   .cb-window{ right:10px; left:10px; width:auto; height:70vh; }
   .cb-resize{ display:none; }
+}
+
+/* ----------------------------------------------------
+   OPEN/CLOSE ANIMATION: smooth + bouncy “door” effect
+   - minder squish: X gaat naar ±55% i.p.v. 30%
+   - bouncy easing met overshoot
+---------------------------------------------------- */
+
+/* Startstate voor openen: smal strookje rechtsonder, dichtgeklapt in Y */
+.cb-window.cb-opening-start{
+  transform-origin: right bottom;
+  transform: translateY(8px) scaleX(0.2) scaleY(0);
+  opacity: 0;
+  transition: none;
+}
+
+/* Open fase 1: Y uitklappen (van onder naar boven), X blijft smal */
+.cb-window.cb-opening-phase1{
+  transform-origin: right bottom;
+  transform: translateY(-4px) scaleX(0.2) scaleY(1.08);
+  opacity: 0.98;
+  transition:
+    transform .32s cubic-bezier(.22, 1.4, .46, 1.02),
+    opacity  .26s ease-out;
+}
+
+/* Open fase 2: X uitklappen naar volle breedte, Y normaliseert */
+.cb-window.cb-opening-phase2{
+  transform-origin: right center;
+  transform: translateY(0) scaleX(1) scaleY(1);
+  opacity: 1;
+  transition:
+    transform .30s cubic-bezier(.18, 1.1, .35, 1),
+    opacity  .22s ease-out;
+}
+
+/* Close fase 1: X inklappen naar ±55% (nog wat window zichtbaar) */
+.cb-window.cb-closing-phase1{
+  transform-origin: right center;
+  transform: translateY(-2px) scaleX(0.2) scaleY(1.03);
+  opacity: 0.96;
+  transition:
+    transform .30s cubic-bezier(.18, 1.1, .35, 1),
+    opacity  .22s ease-out;
+}
+
+/* Close fase 2: Y inklappen naar beneden, klein “dropje” */
+.cb-window.cb-closing-phase2{
+  transform-origin: right bottom;
+  transform: translateY(8px) scaleX(0.2) scaleY(0);
+  opacity: 0;
+  transition:
+    transform .32s cubic-bezier(.22, 1.4, .46, 1.02),
+    opacity  .24s ease-out;
 }
