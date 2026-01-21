@@ -200,7 +200,9 @@ const CHATBOT_CONFIG = {
     addMsg('user', text);
     const typing=addMsg('bot','',true);
 
-    const payload={ chatInput:text, sessionId, metadata:CHATBOT_CONFIG.identity };
+    // const payload={ chatInput:text, sessionId, metadata:CHATBOT_CONFIG.identity };
+    const message_id = "msg_" + Math.random().toString(36).slice(2) + Date.now();
+    const payload = { chatInput:text, sessionId, message_id, metadata:CHATBOT_CONFIG.identity };
 
     try{
       const res=await fetch(CHATBOT_CONFIG.webhookUrl,{
