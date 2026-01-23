@@ -37,6 +37,17 @@ const CHATBOT_CONFIG = {
     remember: true,
     storageKey: "cb_size"
   },
+
+  botId: "chatbot",
+
+  supabase: {
+    supabaseUrl: "https://oxfhlfdwahuzzytpcivk.supabase.co",
+    supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94ZmhsZmR3YWh1enp5dHBjaXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwMDIyMTMsImV4cCI6MjA4NDU3ODIxM30.EmA_DRdeiQ3br9dCw39qH0jvv0LpnPWDzqsQP5IYlNE"
+  },
+
+  request: {
+    timeoutMs: 15000
+  }
 };
 /* ===================== */
 
@@ -65,6 +76,172 @@ const CHATBOT_CONFIG = {
   function applyOpenZoom(){
     const z = Number(CHATBOT_CONFIG.bubbleOpenZoom||1);
     elToggle.style.setProperty('--cb-open-zoom', String(z>0?z:1));
+  }
+
+  /* -------------------------------------------------------
+     Supabase REST helpers (client-side, anon key)
+     ------------------------------------------------------- */
+
+  function sbCfg(){
+    const c = CHATBOT_CONFIG.supabase || {};
+    const url = String(c.supabaseUrl || "").replace(/\/+$/,"");
+    const key = String(c.supabaseAnonKey || "");
+    if (!url || !key) return null;
+    return { url, key };
+  }
+
+  async function sbUpdateChatbotStatus(patch){
+    const cfg = sbCfg();
+    if (!cfg) return;
+
+    const botId = CHATBOT_CONFIG.botId || "chatbot";
+    const url = `${cfg.url}/rest/v1/chatbot_status?id=eq.${encodeURIComponent(botId)}`;
+
+    try {
+      await fetch(url, {
+        method: "PATCH",
+        headers: {
+          apikey: cfg.key,
+          Authorization: `Bearer ${cfg.key}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal"
+        },
+        body: JSON.stringify(patch)
+      });
+    } catch {
+      /* Status logging should never block the chat UX */
+    }
+  }
+
+  async function sbInsertChatEvent(row){
+    const cfg = sbCfg();
+    if (!cfg) return;
+
+    const url = `${cfg.url}/rest/v1/chat_events`;
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          apikey: cfg.key,
+          Authorization: `Bearer ${cfg.key}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal"
+        },
+        body: JSON.stringify(row)
+      });
+
+      if (!res.ok) {
+        try { console.warn("Supabase insert chat_events failed:", res.status, await res.text()); } catch {}
+      }
+    } catch (e) {
+      try { console.warn("Supabase insert chat_events error:", e); } catch {}
+    }
+  }
+
+  function nowIso(){
+    return new Date().toISOString();
+  }
+
+  function safeText(v, maxLen){
+    const s = (v == null) ? "" : String(v);
+    return s.length > maxLen ? s.slice(0, maxLen) : s;
+  }
+
+  async function markBotUp(){
+    await sbUpdateChatbotStatus({
+      is_up: true,
+      last_ok_at: nowIso(),
+      last_error_at: null,
+      last_error: null
+    });
+  }
+
+  async function markBotDown(errorText){
+    const msg = errorText ? String(errorText) : "webhook_error";
+    await sbUpdateChatbotStatus({
+      is_up: false,
+      last_error_at: nowIso(),
+      last_error: msg.slice(0, 500)
+    });
+  }
+
+  async function logFailedChatEvent({ messageId, userText, aiText, httpStatus, errorMsg, latencyMs, requestPayload }){
+    const site = CHATBOT_CONFIG.identity?.site || location.hostname;
+    const path = CHATBOT_CONFIG.identity?.path || location.pathname;
+
+    const workspace_id = site;
+    const conversation_id = sessionId;
+
+    const event_id = `${workspace_id}:${messageId}`;
+    const bot_key = null;
+
+    const latencySafe = 0;
+
+    const reason =
+      httpStatus ? `http_${httpStatus}` :
+      (String(errorMsg || "").toLowerCase().includes("timeout") ? "webhook timeout" : "webhook fetch error");
+
+    const row = {
+      workspace_id,
+      bot_key,
+      event_id,
+      conversation_id,
+
+      created_at: nowIso(),
+
+      user_message: safeText(userText, 4000),
+      ai_output: safeText(aiText, 4000),
+
+      success: false,
+      escalated: false,
+      lead: false,
+
+      reason: safeText(reason, 180),
+
+      outcome: {
+        success: false,
+        escalated: false,
+        lead: false,
+        reason,
+        products: [],
+        clicked_product: false
+      },
+
+      metrics: {
+        tokens: 0,
+        tokens_in: 0,
+        tokens_out: 0,
+        input_cost: 0,
+        output_cost: 0,
+        total_cost: 0,
+        latency_ms: latencySafe
+      },
+
+      raw: {
+        chatInput: userText ?? null,
+        sessionId: conversation_id,
+        message_id: messageId,
+        metadata: CHATBOT_CONFIG.identity || { site, path },
+
+        request: requestPayload || null,
+
+        http_status: httpStatus ?? null,
+        error: errorMsg ?? null,
+
+        output: aiText
+      },
+
+      latency_ms: latencySafe
+    };
+
+    await sbInsertChatEvent(row);
+  }
+
+  function fetchWithTimeout(url, opts, timeoutMs){
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
   }
 
   /* markdown helpers */
@@ -198,20 +375,47 @@ const CHATBOT_CONFIG = {
 
   async function sendMessage(text){
     addMsg('user', text);
-    const typing=addMsg('bot','',true);
+    const typing = addMsg('bot','',true);
 
-    // const payload={ chatInput:text, sessionId, metadata:CHATBOT_CONFIG.identity };
     const message_id = "msg_" + Math.random().toString(36).slice(2) + Date.now();
     const payload = { chatInput:text, sessionId, message_id, metadata:CHATBOT_CONFIG.identity };
 
-    try{
-      const res=await fetch(CHATBOT_CONFIG.webhookUrl,{
-        method:'POST',
-        headers:{ 'Content-Type':'application/json','Accept':'text/event-stream',...CHATBOT_CONFIG.headers },
-        body:JSON.stringify(payload),
-      });
+    const started = performance.now();
+    const timeoutMs = Number(CHATBOT_CONFIG.request?.timeoutMs) || 15000;
 
-      const ctype=(res.headers.get('content-type')||"").toLowerCase();
+    try{
+      const res = await fetchWithTimeout(
+        CHATBOT_CONFIG.webhookUrl,
+        {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json','Accept':'text/event-stream',...CHATBOT_CONFIG.headers },
+          body:JSON.stringify(payload),
+        },
+        timeoutMs
+      );
+
+      const latencyMs = performance.now() - started;
+
+      if (!res.ok) {
+        const uiText = "Er ging iets mis. Probeer het later opnieuw.";
+        typing.textContent = uiText;
+
+        await markBotDown(`HTTP ${res.status}`);
+
+        await logFailedChatEvent({
+          messageId: message_id,
+          userText: text,
+          aiText: uiText,
+          httpStatus: res.status,
+          errorMsg: `HTTP ${res.status}`,
+          latencyMs,
+          requestPayload: payload
+        });
+
+        return;
+      }
+
+      const ctype = (res.headers.get('content-type')||"").toLowerCase();
 
       typing.innerHTML='';
       const holder=document.createElement('div');
@@ -226,43 +430,59 @@ const CHATBOT_CONFIG = {
         let data; try{ data=JSON.parse(raw);}catch{ data=raw; }
         holder.innerHTML=renderMarkdown(CHATBOT_CONFIG.parseReply(data));
       }
+
+      await markBotUp();
+
     } catch(e){
+      const latencyMs = performance.now() - started;
+
+      const errText =
+        (e && e.name === "AbortError")
+          ? "Timeout"
+          : (e?.message || String(e || "fetch_error"));
+
+      const uiText = "Er ging iets mis. Probeer het later opnieuw.";
       console.error(e);
-      typing.textContent="Er ging iets mis. Probeer het later opnieuw.";
+      typing.textContent = uiText;
+
+      await markBotDown(errText);
+
+      await logFailedChatEvent({
+        messageId: message_id,
+        userText: text,
+        aiText: uiText,
+        httpStatus: null,
+        errorMsg: errText,
+        latencyMs,
+        requestPayload: payload
+      });
     }
   }
 
   /* OPEN/CLOSE animatie met fases */
   function setOpen(open){
     if (open) {
-      // eventuele closing classes resetten
       elWin.classList.remove('cb-closing-phase1','cb-closing-phase2',
                              'cb-opening-phase1','cb-opening-phase2');
 
-      // cb-open + startstate: klein strookje rechtsonder
       elWin.classList.add('cb-open','cb-opening-start');
       elToggle.classList.add('is-open');
 
-      // volgende frame: fase1 → omhoog uitklappen
       requestAnimationFrame(() => {
         elWin.classList.add('cb-opening-phase1');
         elWin.classList.remove('cb-opening-start');
 
-        // duur moet matchen CSS (.28s)
         setTimeout(() => {
-          // fase2 → horizontaal uitklappen
           elWin.classList.add('cb-opening-phase2');
           elWin.classList.remove('cb-opening-phase1');
 
-          // na fase2 klaar → cleanup + focus
           setTimeout(() => {
             elWin.classList.remove('cb-opening-phase2');
             elInput.focus();
-          }, 260); // match .cb-opening-phase2
-        }, 280);   // match .cb-opening-phase1
+          }, 260);
+        }, 280);
       });
     } else {
-      // sluiten: eerst X inklappen, dan Y
       elWin.classList.remove('cb-opening-start','cb-opening-phase1','cb-opening-phase2');
       elWin.classList.add('cb-closing-phase1');
 
@@ -273,8 +493,8 @@ const CHATBOT_CONFIG = {
         setTimeout(() => {
           elWin.classList.remove('cb-open','cb-closing-phase2');
           elToggle.classList.remove('is-open');
-        }, 280); // match .cb-closing-phase2
-      }, 260);   // match .cb-closing-phase1
+        }, 280);
+      }, 260);
     }
   }
 
